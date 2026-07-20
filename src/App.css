@@ -114,10 +114,28 @@
   height: 22px;
 }
 
-/* Cursor cian (#00ffff) al estilo nvim cuando vim mode está activo */
-.vim-active .monaco-editor .cursor {
+/* ── Cursor cian #00ffff al estilo nvim ─────────────────────────────────────
+   Monaco usa .cursor para el bloque (normal) y .cursor-line-primary para
+   el cursor de línea (insert). Cubrimos ambos + la variante seleccionada.   */
+.vim-active .monaco-editor .cursor,
+.vim-active .monaco-editor .cursor-secondary {
   background: #00ffff !important;
   border-color: #00ffff !important;
+}
+/* Cursor de línea en insert mode */
+.vim-active .monaco-editor .cursor-line-primary,
+.vim-active .monaco-editor .cursor-line-secondary {
+  border-left-color: #00ffff !important;
+  background: #00ffff !important;
+}
+/* Cursor de subrayado en replace mode */
+.vim-active .monaco-editor .cursor-underline-primary {
+  border-bottom-color: #00ffff !important;
+}
+/* El texto debajo del bloque invierte a oscuro (como nvim con fg=#1e1e2e) */
+.vim-active .monaco-editor .cursor {
+  color: #1e1e2e !important;
+  mix-blend-mode: normal !important;
 }
 
 /* Decoraciones Monaco inyectadas por createDecorationsCollection */

@@ -1,9 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import Editor from './components/Editor'
+import ErrorBoundary from './components/ErrorBoundary'
 import Output from './components/Output'
 import PreviewPane from './components/PreviewPane'
 import TitleBar from './components/TitleBar'
 import TabBar from './components/TabBar'
+import useTabs from './hooks/useTabs'
+import useLayout from './hooks/useLayout'
+import useCodeRunner from './hooks/useCodeRunner'
 import { THEMES, DEFAULT_THEME, applyThemeVars } from './themes'
 import './App.css'
 
@@ -51,88 +55,32 @@ export default function Palette() {
 }
 `
 
-const createTab = (overrides = {}) => ({
-  id: crypto.randomUUID(),
-  fileName: 'Untitled',
-  filePath: null,
-  code: '',
-  language: 'javascript',
-  isDirty: false,
-  output: [],
-  execTime: null,
-  previewCode: null,
-  ...overrides,
-})
-
 export default function App() {
-  const initialTab = useMemo(() => createTab({ code: DEFAULT_CODE, language: 'tsx', fileName: 'Palette.tsx' }), [])
-  const [tabs, setTabs]               = useState([initialTab])
-  const [activeTabId, setActiveTabId] = useState(initialTab.id)
-  const [runningTabId, setRunningTabId] = useState(null)
+  // ── Hooks ──────────────────────────────────────────────────────────────────
+  const {
+    tabs, activeTab, activeTabId, setActiveTabId,
+    updateTab, addTab, closeTab, replaceTab,
+  } = useTabs(DEFAULT_CODE, 'tsx', 'Palette.tsx')
+
+  const {
+    layout, outputStyle, mainDivClass, isVertical, consoleHeight,
+    handleLayoutChange, onMainDividerDown, onConsoleDividerDown,
+  } = useLayout()
+
+  const { runningTabId, runNowRef } = useCodeRunner(activeTab, updateTab)
+
+  // ── Monaco / theme ─────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(
     () => localStorage.getItem('xp-theme') ?? DEFAULT_THEME
   )
+  const [vimMode, setVimMode] = useState(
+    () => localStorage.getItem('xp-vim') === 'true'
+  )
 
-  const runningRef    = useRef(false)
-  const pendingRef    = useRef(null)
   const editorRef     = useRef(null)
   const monacoRef     = useRef(null)
   const decorationRef = useRef(null)
 
-  const [layout,        setLayout]        = useState('row')
-  const [outputSize,    setOutputSize]    = useState(400)
-  const [consoleHeight, setConsoleHeight] = useState(170)
-  const [vimMode,       setVimMode]       = useState(
-    () => localStorage.getItem('xp-vim') === 'true'
-  )
-  const outputSizeRef    = useRef(400)
-  const consoleHeightRef = useRef(170)
-
-  const handleLayoutChange = useCallback((newLayout) => {
-    const wasVert = layout === 'col' || layout === 'col-reverse'
-    const willVert = newLayout === 'col' || newLayout === 'col-reverse'
-    if (wasVert !== willVert) {
-      const def = willVert ? 280 : 400
-      outputSizeRef.current = def
-      setOutputSize(def)
-    }
-    setLayout(newLayout)
-  }, [layout])
-
-  const onMainDividerDown = useCallback((e) => {
-    e.preventDefault()
-    const isVert = layout === 'col' || layout === 'col-reverse'
-    const start  = isVert ? e.clientY : e.clientX
-    const startS = outputSizeRef.current
-    const onMove = (e) => {
-      const cur   = isVert ? e.clientY : e.clientX
-      const delta = layout === 'row' || layout === 'col'
-        ? start - cur   // output on right/bottom: drag toward editor = grows output
-        : cur - start   // output on left/top:    drag away from editor = grows output
-      const max   = isVert ? window.innerHeight - 100 : window.innerWidth - 240
-      outputSizeRef.current = Math.max(120, Math.min(startS + delta, max))
-      setOutputSize(outputSizeRef.current)
-    }
-    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [layout])
-
-  const onConsoleDividerDown = useCallback((e) => {
-    e.preventDefault()
-    const startY = e.clientY
-    const startH = consoleHeightRef.current
-    const onMove = (e) => {
-      const h = Math.max(60, Math.min(startH + (e.clientY - startY), window.innerHeight - 160))
-      consoleHeightRef.current = h
-      setConsoleHeight(h)
-    }
-    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [])
-
-  // Aplicar tema: CSS vars + Monaco
   useEffect(() => {
     const t = THEMES[theme] ?? THEMES[DEFAULT_THEME]
     applyThemeVars(t.vars)
@@ -140,120 +88,27 @@ export default function App() {
     if (monacoRef.current) monacoRef.current.editor.setTheme(t.monacoId)
   }, [theme])
 
-  const activeTab = useMemo(
-    () => tabs.find(t => t.id === activeTabId) ?? tabs[0],
-    [tabs, activeTabId]
-  )
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  const updateTab = useCallback((id, updates) => {
-    setTabs(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
-  }, [])
-
-  const addTab = useCallback((overrides = {}) => {
-    const tab = createTab(overrides)
-    setTabs(prev => [...prev, tab])
-    setActiveTabId(tab.id)
-    return tab
-  }, [])
-
-  const closeTab = useCallback((id) => {
-    setTabs(prev => {
-      if (prev.length === 1) return prev
-      const next = prev.filter(t => t.id !== id)
-      if (activeTabId === id) {
-        const idx = prev.findIndex(t => t.id === id)
-        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
-      }
-      return next
-    })
-  }, [activeTabId])
-
-  // ── Ejecución JS / TS / PY ────────────────────────────────────────────────
-  const executeCode = useCallback(async (tabId, src, lang) => {
-    if (runningRef.current) return
-    runningRef.current = true
-    setRunningTabId(tabId)
-    const start = performance.now()
-    try {
-      const result = await window.xp.runCode(src, lang)
-      const elapsed = performance.now() - start
-      const entries = [...result.logs]
-      if (result.error) {
-        entries.push({ type: 'throw', values: [{ type: 'error', display: result.error.message }], stack: result.error.stack, line: result.error.line })
-      } else if (result.result !== undefined) {
-        entries.push({ type: 'return', values: [result.result] })
-      }
-      updateTab(tabId, { output: entries, execTime: elapsed })
-    } finally {
-      runningRef.current = false
-      setRunningTabId(null)
-    }
-  }, [updateTab])
-
-  // ── Transformación JSX / TSX ───────────────────────────────────────────────
-  const transformJSX = useCallback(async (tabId, src, lang) => {
-    try {
-      const result = await window.xp.transformJSX(src, lang)
-      if (result.error) {
-        updateTab(tabId, {
-          previewCode: null,
-          output: [{ type: 'throw', values: [{ type: 'error', display: result.error }], line: null }],
-        })
-      } else {
-        updateTab(tabId, { previewCode: result.code, output: [] })
-      }
-    } catch (err) {
-      updateTab(tabId, {
-        previewCode: null,
-        output: [{ type: 'throw', values: [{ type: 'error', display: err.message }], line: null }],
-      })
-    }
-  }, [updateTab])
-
-  // Auto-run con debounce al cambiar código/lenguaje del tab activo
-  const { id: activeId, code: activeCode, language: activeLang } = activeTab ?? {}
-  useEffect(() => {
-    if (!activeId) return
-    clearTimeout(pendingRef.current)
-    if (activeLang === 'jsx' || activeLang === 'tsx') {
-      pendingRef.current = setTimeout(() => transformJSX(activeId, activeCode, activeLang), 300)
-    } else {
-      pendingRef.current = setTimeout(() => executeCode(activeId, activeCode, activeLang), 600)
-    }
-    return () => clearTimeout(pendingRef.current)
-  }, [activeId, activeCode, activeLang, executeCode, transformJSX])
-
-  // ── Operaciones de archivo ────────────────────────────────────────────────
-  const handleNew = useCallback(() => {
-    addTab()
-  }, [addTab])
+  // ── File operations ────────────────────────────────────────────────────────
+  const handleNew = useCallback(() => addTab(), [addTab])
 
   const handleOpen = useCallback(async () => {
     const file = await window.xp.openFile()
     if (!file) return
-    // Si el archivo ya está abierto en otra tab, activarla
     const existing = tabs.find(t => t.filePath === file.path)
     if (existing) { setActiveTabId(existing.id); return }
 
-    const lang     = file.path.endsWith('.tsx') ? 'tsx'
-                   : file.path.endsWith('.jsx') ? 'jsx'
-                   : file.path.endsWith('.ts')  ? 'typescript'
-                   : file.path.endsWith('.py')  ? 'python'
-                   : 'javascript'
+    const lang = file.path.endsWith('.tsx') ? 'tsx'
+               : file.path.endsWith('.jsx') ? 'jsx'
+               : file.path.endsWith('.ts')  ? 'typescript'
+               : file.path.endsWith('.py')  ? 'python'
+               : 'javascript'
     const fileName = file.path.split('/').pop()
     const tabData  = { code: file.content, filePath: file.path, fileName, language: lang, isDirty: false }
 
-    // Si el tab activo está limpio, reemplazarlo in-place (nueva ID = nuevo modelo Monaco)
     const isClean = activeTab && !activeTab.isDirty && !activeTab.filePath && activeTab.code === ''
-    if (isClean) {
-      const replacement = createTab(tabData)
-      setTabs(prev => prev.map(t => t.id === activeTabId ? replacement : t))
-      setActiveTabId(replacement.id)
-    } else {
-      addTab(tabData)
-    }
-  }, [tabs, activeTab, activeTabId, updateTab, addTab])
+    if (isClean) replaceTab(activeTabId, tabData)
+    else addTab(tabData)
+  }, [tabs, activeTab, activeTabId, setActiveTabId, addTab, replaceTab])
 
   const handleSave = useCallback(async () => {
     if (!activeTab) return
@@ -280,7 +135,7 @@ export default function App() {
     updateTab(activeTabId, updates)
   }, [activeTab, activeTabId, updateTab])
 
-  // ── Atajos de teclado ─────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
       if (!e.ctrlKey && !e.metaKey) return
@@ -288,12 +143,13 @@ export default function App() {
       if (e.key === 'o') { e.preventDefault(); handleOpen() }
       if (e.key === 't') { e.preventDefault(); addTab() }
       if (e.key === 'w') { e.preventDefault(); closeTab(activeTabId) }
+      if (e.key === 'Enter') { e.preventDefault(); runNowRef.current?.() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleNew, handleOpen, addTab, closeTab, activeTabId])
+  }, [handleNew, handleOpen, addTab, closeTab, activeTabId, runNowRef])
 
-  // ── Monaco ────────────────────────────────────────────────────────────────
+  // ── Monaco setup ───────────────────────────────────────────────────────────
   const handleThemeChange = useCallback((id) => setTheme(id), [])
 
   const handleToggleVim = useCallback(() => {
@@ -309,16 +165,31 @@ export default function App() {
     monacoRef.current     = monaco
     decorationRef.current = editor.createDecorationsCollection([])
 
-    // Registrar todos los temas custom en Monaco
     for (const t of Object.values(THEMES)) {
       if (t.definition) monaco.editor.defineTheme(t.monacoId, t.definition)
     }
-    // Aplicar el tema actual (CSS vars ya están, solo falta Monaco)
     const current = THEMES[theme] ?? THEMES[DEFAULT_THEME]
     monaco.editor.setTheme(current.monacoId)
-    // Aplicar vars por si es el primer render
     applyThemeVars(current.vars)
   }, [theme])
+
+  // Reflect runtime/compile errors as Monaco markers in the editor
+  useEffect(() => {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco || !activeTab) return
+    const model = editor.getModel()
+    if (!model) return
+    const errors = (activeTab.output ?? []).filter(e => e.type === 'throw' && e.line != null)
+    monaco.editor.setModelMarkers(model, 'xp-runtime', errors.map(e => ({
+      severity: monaco.MarkerSeverity.Error,
+      message: e.values?.[0]?.display ?? 'Error',
+      startLineNumber: e.line,
+      endLineNumber: e.line,
+      startColumn: 1,
+      endColumn: model.getLineMaxColumn(e.line),
+    })))
+  }, [activeTab?.output, activeTabId])
 
   const highlightLine = useCallback((line) => {
     if (!decorationRef.current || !monacoRef.current || !line) return
@@ -333,11 +204,6 @@ export default function App() {
   if (!activeTab) return null
 
   const isPreview = activeTab.language === 'jsx' || activeTab.language === 'tsx'
-  const isVertical = layout === 'col' || layout === 'col-reverse'
-  const mainDivClass = isVertical ? 'divider-h' : 'divider-v'
-  const outputStyle  = isVertical
-    ? { width: '100%', height: outputSize }
-    : { width: outputSize }
 
   return (
     <div className="app">
@@ -369,15 +235,18 @@ export default function App() {
       />
       <div className="workspace" style={{ flexDirection: layout }}>
         <div className="editor-pane">
-          <Editor
-            path={activeTab.id}
-            value={activeTab.code}
-            language={activeTab.language}
-            onChange={handleCodeChange}
-            onEditorMount={handleEditorMount}
-            onSave={handleSave}
-            vimMode={vimMode}
-          />
+          <ErrorBoundary>
+            <Editor
+              path={activeTab.id}
+              value={activeTab.code}
+              language={activeTab.language}
+              onChange={handleCodeChange}
+              onEditorMount={handleEditorMount}
+              onSave={handleSave}
+              onRun={() => runNowRef.current?.()}
+              vimMode={vimMode}
+            />
+          </ErrorBoundary>
         </div>
         <div className={mainDivClass} onMouseDown={onMainDividerDown} />
         <div

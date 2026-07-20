@@ -83,7 +83,7 @@ export default function Output({ entries, running, execTime, onHoverLine, onClea
         )}
         {entries.map((entry, i) => (
           <Entry
-            key={i}
+            key={entry.id ?? i}
             index={i}
             entry={entry}
             onHoverLine={onHoverLine}

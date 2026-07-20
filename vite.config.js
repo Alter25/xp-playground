@@ -4,6 +4,16 @@ import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('monaco-editor')) return 'monaco-editor'
+          if (id.includes('monaco-vim'))    return 'monaco-vim'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     electron([
@@ -28,6 +38,15 @@ export default defineConfig({
         },
         onstart({ reload }) {
           reload()
+        },
+      },
+      {
+        entry: 'electron/js-worker.js',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: { external: ['esbuild'] },
+          },
         },
       },
     ]),

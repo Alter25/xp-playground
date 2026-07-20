@@ -4,14 +4,22 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 app.commandLine.appendSwitch('no-sandbox')
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import vm from 'node:vm'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
+import { Worker } from 'node:worker_threads'
 
 const _require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// esbuild errors have structured location data in err.errors[0].location.line
+function parseEsbuildLine(err) {
+  if (err?.errors?.[0]?.location?.line) return err.errors[0].location.line
+  // Fallback: parse text format "<stdin>:5:2: error: ..."
+  const m = (err?.message ?? '').match(/(?:<stdin>|\[stdin\]):(\d+):\d+:/)
+  return m ? parseInt(m[1], 10) : null
+}
 
 // ── esbuild ───────────────────────────────────────────────────────────────────
 // ESM `import` is hoisted and evaluated before any code here runs.
@@ -100,29 +108,28 @@ async function runPython(code) {
   fs.writeFileSync(codeFile, code, 'utf-8')
 
   return new Promise((resolve) => {
-    // Intentar python3, luego python
     const cmd = process.platform === 'win32' ? 'python' : 'python3'
     const proc = spawn(cmd, [RUNNER_PATH, codeFile])
 
-    let stdout = ''
-    let stderr = ''
+    let stdout = '', stderr = '', settled = false
+
+    const settle = (val) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try { fs.unlinkSync(codeFile) } catch {}
+      resolve(val)
+    }
 
     const timer = setTimeout(() => {
       proc.kill()
-      cleanup()
-      resolve({ logs: [], result: undefined, error: { message: 'Timeout: ejecución cancelada (>10s)', line: null } })
+      settle({ logs: [], result: undefined, error: { message: 'Timeout: ejecución cancelada (>10s)', line: null } })
     }, 10000)
 
     proc.stdout.on('data', d => { stdout += d })
     proc.stderr.on('data', d => { stderr += d })
 
-    function cleanup() {
-      clearTimeout(timer)
-      try { fs.unlinkSync(codeFile) } catch {}
-    }
-
     proc.on('close', () => {
-      cleanup()
       try {
         const data = JSON.parse(stdout)
         const logs = data.logs.map(entry => ({
@@ -131,70 +138,60 @@ async function runPython(code) {
           values: [{ type: 'raw', display: entry.value }],
           ...(entry.stack ? { stack: entry.stack } : {}),
         }))
-        resolve({ logs, result: undefined, error: null })
+        settle({ logs, result: undefined, error: null })
       } catch {
-        const msg = stderr.trim() || stdout.trim() || 'Error desconocido'
-        resolve({ logs: [], result: undefined, error: { message: msg, line: null } })
+        settle({ logs: [], result: undefined, error: { message: stderr.trim() || stdout.trim() || 'Error desconocido', line: null } })
       }
     })
 
     proc.on('error', (err) => {
-      cleanup()
       const msg = err.code === 'ENOENT'
         ? `Python no encontrado. Asegúrate de tener python3 instalado (comando: ${cmd})`
         : err.message
-      resolve({ logs: [], result: undefined, error: { message: msg, line: null } })
+      settle({ logs: [], result: undefined, error: { message: msg, line: null } })
     })
   })
 }
 
 // ── Ejecución JS / TS ─────────────────────────────────────────────────────────
-const VM_FILENAME = 'playground.js'
-
-function vmLine(stack) {
-  const m = (stack || '').match(/playground\.js:(\d+)/)
-  return m ? parseInt(m[1], 10) : null
-}
-
 async function runJS(code, language) {
-  const logs = []
-
-  let jsCode = code
-  if (language === 'typescript') {
-    try {
-      jsCode = getEsbuild().transformSync(code, { loader: 'ts', target: 'esnext', format: 'esm' }).code
-    } catch (err) {
-      return { logs, result: undefined, error: { message: err.message, stack: err.stack, line: null } }
-    }
-  }
-
-  const sandbox = {
-    console: {
-      log:   (...args) => { const line = vmLine(new Error().stack); logs.push({ type: 'log',   values: args.map(serialize), line }) },
-      error: (...args) => { const line = vmLine(new Error().stack); logs.push({ type: 'error', values: args.map(serialize), line }) },
-      warn:  (...args) => { const line = vmLine(new Error().stack); logs.push({ type: 'warn',  values: args.map(serialize), line }) },
-      info:  (...args) => { const line = vmLine(new Error().stack); logs.push({ type: 'info',  values: args.map(serialize), line }) },
-      table: (data)    => { const line = vmLine(new Error().stack); logs.push({ type: 'table', values: [serialize(data)], line }) },
-    },
-    setTimeout, clearTimeout, setInterval, clearInterval,
-    Promise, JSON, Math, Date,
-    Array, Object, String, Number, Boolean, RegExp, Map, Set,
-    Error, TypeError, RangeError,
-    fetch: globalThis.fetch,
-  }
-
-  vm.createContext(sandbox)
-
+  // Compilar siempre a CJS via esbuild (async, no bloquea):
+  //  - TS: quita tipos y transforma JSX si lo hubiera
+  //  - JS: convierte import/export a require/module.exports para que node:vm pueda ejecutarlo
+  const loader = language === 'typescript' ? 'ts' : 'js'
+  let jsCode
   try {
-    const wrapped = `(async () => {\n${jsCode}\n})()`
-    const script = new vm.Script(wrapped, { filename: VM_FILENAME })
-    const result = await script.runInContext(sandbox, { timeout: 10000 })
-    return { logs, result: result !== undefined ? serialize(result) : undefined, error: null }
+    const out = await getEsbuild().transform(code, { loader, target: 'esnext', format: 'cjs' })
+    jsCode = out.code
   } catch (err) {
-    const rawLine = vmLine(err.stack)
-    const line = rawLine != null ? rawLine - 1 : null
-    return { logs, result: undefined, error: { message: err.message, stack: err.stack, line } }
+    return { logs: [], result: undefined, error: { message: err.message, stack: err.stack, line: parseEsbuildLine(err) } }
   }
+
+  // Ejecutar en Worker thread — no bloquea el main process (punto 4)
+  return new Promise((resolve) => {
+    const workerPath = path.join(__dirname, 'js-worker.js')
+    const worker = new Worker(workerPath, { workerData: { code: jsCode } })
+
+    let settled = false
+    const settle = (val) => {
+      if (settled) return
+      settled = true
+      resolve(val)
+    }
+
+    // Timeout exterior: por si el worker se cuelga en código async (fetch, timers, etc.)
+    const timer = setTimeout(() => {
+      worker.terminate()
+      settle({ logs: [], result: undefined, error: { message: 'Timeout: ejecución cancelada (>10s)', line: null } })
+    }, 12000)
+
+    worker.on('message', (result) => { clearTimeout(timer); settle(result) })
+    worker.on('error',   (err)    => { clearTimeout(timer); settle({ logs: [], result: undefined, error: { message: err.message, line: null } }) })
+    worker.on('exit',    (code)   => {
+      clearTimeout(timer)
+      if (code !== 0) settle({ logs: [], result: undefined, error: { message: `Worker terminó inesperadamente`, line: null } })
+    })
+  })
 }
 
 ipcMain.handle('run-code', async (_event, { code, language }) => {
@@ -202,9 +199,10 @@ ipcMain.handle('run-code', async (_event, { code, language }) => {
   return runJS(code, language)
 })
 
-ipcMain.handle('transform-jsx', (_event, { code, language }) => {
+// async build — no bloquea el main process (punto 3)
+ipcMain.handle('transform-jsx', async (_event, { code, language }) => {
   try {
-    const result = getEsbuild().buildSync({
+    const result = await getEsbuild().build({
       stdin: {
         contents: code,
         loader: language === 'tsx' ? 'tsx' : 'jsx',
@@ -220,7 +218,7 @@ ipcMain.handle('transform-jsx', (_event, { code, language }) => {
     })
     return { code: result.outputFiles[0].text, error: null }
   } catch (err) {
-    return { code: null, error: err.message }
+    return { code: null, error: err.message, line: parseEsbuildLine(err) }
   }
 })
 
@@ -269,21 +267,6 @@ ipcMain.handle('file-save-as', async (e, { content, language }) => {
   fs.writeFileSync(filePath, content, 'utf-8')
   return filePath
 })
-
-// ── Serialización JS ──────────────────────────────────────────────────────────
-function serialize(val) {
-  if (val === null)      return { type: 'null',      display: 'null' }
-  if (val === undefined) return { type: 'undefined', display: 'undefined' }
-  if (typeof val === 'function') return { type: 'function', display: `[Function: ${val.name || 'anonymous'}]` }
-  if (typeof val === 'symbol')   return { type: 'symbol',   display: val.toString() }
-  if (typeof val === 'bigint')   return { type: 'bigint',   display: `${val}n` }
-  if (typeof val === 'number')   return { type: 'number',   display: String(val) }
-  if (typeof val === 'boolean')  return { type: 'boolean',  display: String(val) }
-  if (typeof val === 'string')   return { type: 'string',   display: JSON.stringify(val) }
-  if (val instanceof Error)      return { type: 'error',    display: `${val.name}: ${val.message}` }
-  try { return { type: typeof val, display: JSON.stringify(val, null, 2) } }
-  catch { return { type: typeof val, display: String(val) } }
-}
 
 // ── Plugins ───────────────────────────────────────────────────────────────────
 ipcMain.handle('get-plugins', async () => {
