@@ -1,0 +1,170 @@
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 34px;
+  overflow: hidden;
+}
+
+.tabbar-list {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.tabbar-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Tab individual ── */
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px 0 8px;
+  min-width: 90px;
+  max-width: 180px;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+  user-select: none;
+}
+
+.tab:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.tab-active {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Línea de acento inferior en el tab activo */
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* Indicador de ejecución */
+.tab-running .tab-name {
+  opacity: 0.7;
+  animation: tab-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes tab-pulse {
+  from { opacity: 0.7; }
+  to   { opacity: 0.4; }
+}
+
+/* Badge de lenguaje */
+.tab-lang {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.tab-lang-js {
+  color: #c8a000;
+  background: rgba(240, 219, 79, 0.12);
+}
+
+.tab-lang-ts {
+  color: #3b8ad4;
+  background: rgba(49, 120, 198, 0.15);
+}
+
+.tab-lang-py {
+  color: #4b9cd3;
+  background: rgba(75, 156, 211, 0.15);
+}
+
+.tab-lang-jsx {
+  color: #61dafb;
+  background: rgba(97, 218, 251, 0.12);
+}
+
+.tab-lang-tsx {
+  color: #3b8ad4;
+  background: rgba(49, 120, 198, 0.15);
+}
+
+/* Nombre del archivo */
+.tab-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* Punto de cambios sin guardar */
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Botón cerrar */
+.tab-close {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s, opacity 0.1s;
+}
+
+.tab:hover .tab-close,
+.tab-active .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: rgba(244, 71, 71, 0.2);
+  color: var(--red);
+}
+
+/* Botón "+" — vive dentro de tabbar-list, pegado al último tab */
+.tabbar-add {
+  flex-shrink: 0;
+  width: 28px;
+  font-size: 16px;
+  color: var(--text-muted);
+  border-radius: 4px;
+  margin: 4px 4px 4px 2px;
+  align-self: center;
+  transition: background 0.1s, color 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tabbar-add:hover {
+  background: var(--surface2);
+  color: var(--text);
+}

@@ -1,0 +1,153 @@
+.output {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+.output-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 32px;
+}
+
+.exec-time {
+  margin-left: auto;
+  font-family: monospace;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.running-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.3; }
+}
+
+.output-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: 13px;
+}
+
+.output-empty {
+  padding: 24px 12px;
+  color: var(--text-muted);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+}
+
+/* ── Cada entrada ── */
+.entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  padding: 2px 8px 2px 0;
+  line-height: 1.5;
+  min-height: 22px;
+}
+
+.entry-hoverable { cursor: default; }
+
+.entry-hoverable:hover {
+  background: rgba(255, 200, 50, 0.07) !important;
+}
+
+.entry-warn  { background: rgba(220, 220, 170, 0.05); }
+.entry-error,
+.entry-throw { background: rgba(244, 71, 71, 0.07); }
+.entry-return {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+  margin-top: 2px;
+}
+
+/* Número de línea secuencial (gutter izquierdo) */
+.entry-n {
+  flex-shrink: 0;
+  width: 36px;
+  text-align: right;
+  padding-right: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  opacity: 0.5;
+  user-select: none;
+}
+
+.entry:hover .entry-n {
+  opacity: 0.9;
+}
+
+/* Ícono de tipo */
+.entry-icon {
+  flex-shrink: 0;
+  width: 14px;
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+/* Contenido */
+.entry-values {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Línea de origen en el editor (:3, :7…) */
+.entry-srcline {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.45;
+  padding-left: 10px;
+  font-family: monospace;
+  align-self: center;
+}
+
+.entry-hoverable:hover .entry-srcline {
+  opacity: 1;
+  color: rgba(255, 200, 50, 0.75);
+}
+
+/* Stack trace colapsable — flex: 0 0 100% lo fuerza a nueva línea */
+.entry-stack {
+  flex: 0 0 100%;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.entry-stack summary {
+  cursor: pointer;
+  list-style: none;
+  padding-left: 40px;
+  color: var(--text-muted);
+}
+
+.entry-stack pre {
+  padding: 6px 40px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}

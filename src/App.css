@@ -1,0 +1,132 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.editor-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Vertical divider (editor | output) ── */
+.divider-v {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  z-index: 1;
+}
+.divider-v::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.divider-v:hover::after,
+.divider-v:active::after { background: var(--accent); }
+
+/* ── Horizontal divider (console | preview) ── */
+.divider-h {
+  height: 5px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  position: relative;
+  z-index: 1;
+}
+.divider-h::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  top: 2px;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.divider-h:hover::after,
+.divider-h:active::after { background: var(--accent); }
+
+.output-pane {
+  min-width: 180px;
+  min-height: 80px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* JSX/TSX split: console-wrap (dynamic height) + preview (fills rest) */
+.console-wrap {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.output-pane-split > .preview-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Vim mode ── */
+.editor-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Monaco wrapper inside the flex column: take remaining space, yield to statusbar */
+.editor-wrap .monaco-wrapper {
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.vim-statusbar {
+  height: 0;
+  font-size: 12px;
+  font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  color: var(--text);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition: height 0.1s;
+}
+
+.vim-active .vim-statusbar {
+  height: 22px;
+}
+
+/* Cursor cian (#00ffff) al estilo nvim cuando vim mode está activo */
+.vim-active .monaco-editor .cursor {
+  background: #00ffff !important;
+  border-color: #00ffff !important;
+}
+
+/* Decoraciones Monaco inyectadas por createDecorationsCollection */
+.monaco-editor .editor-highlight-line {
+  background: rgba(255, 200, 50, 0.1) !important;
+}
+
+.monaco-editor .editor-highlight-gutter {
+  background: rgba(255, 200, 50, 0.7) !important;
+  width: 3px !important;
+  margin-left: 2px;
+}
