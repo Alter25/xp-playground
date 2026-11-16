@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import Editor from './components/Editor'
 import ErrorBoundary from './components/ErrorBoundary'
 import Output from './components/Output'
@@ -135,19 +135,32 @@ export default function App() {
     updateTab(activeTabId, updates)
   }, [activeTab, activeTabId, updateTab])
 
+  // ── Native menu actions ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!window.xp?.onMenuAction) return
+    const unsubscribe = window.xp.onMenuAction((action) => {
+      if (action === 'new-file') handleNew()
+      if (action === 'new-tab') addTab()
+      if (action === 'open') handleOpen()
+      if (action === 'save') handleSave()
+      if (action === 'save-as') handleSaveAs()
+      if (action === 'close-tab') closeTab(activeTabId)
+      if (action === 'open-plugins') window.xp.openPluginsDir()
+    })
+    return () => unsubscribe?.()
+  }, [handleNew, handleOpen, handleSave, handleSaveAs, addTab, closeTab, activeTabId])
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
-      if (!e.ctrlKey && !e.metaKey) return
-      if (e.key === 'n') { e.preventDefault(); handleNew() }
-      if (e.key === 'o') { e.preventDefault(); handleOpen() }
-      if (e.key === 't') { e.preventDefault(); addTab() }
-      if (e.key === 'w') { e.preventDefault(); closeTab(activeTabId) }
-      if (e.key === 'Enter') { e.preventDefault(); runNowRef.current?.() }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        runNowRef.current?.()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleNew, handleOpen, addTab, closeTab, activeTabId, runNowRef])
+  }, [runNowRef])
 
   // ── Monaco setup ───────────────────────────────────────────────────────────
   const handleThemeChange = useCallback((id) => setTheme(id), [])

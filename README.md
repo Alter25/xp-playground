@@ -1,6 +1,6 @@
 # XP Playground
 
-A desktop code playground for Linux built with Electron, React, and Monaco Editor — the same engine that powers VS Code. Write JavaScript, TypeScript, JSX, TSX, or Python and see the results instantly, with full IntelliSense and a live component preview for JSX/TSX.
+A desktop code playground for macOS built with Electron, React, and Monaco Editor — the same engine that powers VS Code. Write JavaScript, TypeScript, JSX, TSX, or Python and see the results instantly, with full IntelliSense and a live component preview for JSX/TSX.
 
 ---
 
@@ -15,27 +15,34 @@ A desktop code playground for Linux built with Electron, React, and Monaco Edito
 - **Resizable panels** — drag the divider between editor and output. Four layout presets: editor left/right, top/bottom.
 - **Seven themes** — Dark, Light, Monokai, Dracula, One Dark, Nord, Solarized Dark.
 - **File system** — open and save files via native OS dialogs. Supports `.js`, `.ts`, `.jsx`, `.tsx`, `.py`.
-- **Plugin system** — extend Monaco with custom completions, hover docs, snippets, or new languages. Drop a `.js` file in `~/.config/xp/plugins/` and it loads on startup.
+- **Plugin system** — extend Monaco with custom completions, hover docs, snippets, or new languages. Drop a `.js` file in `~/Library/Application Support/XP Playground/plugins/` and it loads on startup.
 - **Tailwind autocomplete** — class suggestions fire inside `className`, `cn()`, `clsx()`, and `cva()` attributes.
 - **Line tracking** — every `console.log` entry shows its source line number. Hover an output entry to highlight the corresponding line in the editor.
-- **Frameless window** — custom titlebar with minimize / maximize / close controls. Supports transparency and rounded corners (requires a compositor).
+- **Native macOS window** — hidden-inset titlebar with native traffic lights, an opaque window, and a native application menu with `⌘` shortcuts.
 
 ---
 
 ## Installation
 
-### From release (AppImage)
+### Build and install locally
+
+Requires macOS on Apple Silicon, Node.js 20+, and optionally Python 3.
 
 ```bash
-# Clone and install
 git clone https://github.com/Alter25/xp-playground.git
 cd xp-playground
-npm install
+npm ci
 npm run electron:build
-bash install.sh
+bash install-macos.sh
 ```
 
-`install.sh` copies the AppImage to `~/.local/bin/xp-playground.AppImage` and creates a `.desktop` entry so the app appears in your application launcher.
+`electron:build` creates an unsigned `arm64` DMG and ZIP in `release/`. `install-macos.sh` copies `XP Playground.app` to `~/Applications`.
+
+Because the build is unsigned, macOS Gatekeeper may require right-click → **Open** the first time. You can also remove the quarantine attribute manually:
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Applications/XP Playground.app"
+```
 
 ### Development mode
 
@@ -60,7 +67,7 @@ Editor (renderer) → IPC → node:vm sandbox (main) → serialized output → I
 
 ### Python
 
-Python code is written to a temporary file and executed as a child process (`python3`). A small runner script injected at startup replaces the built-in `print` with a version that records each call's line number and returns all output as JSON over stdout.
+Python code is written to a temporary file and executed as a child process. The app resolves Python from `/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, then `/usr/bin/python3`; set `XP_PYTHON` to override the executable. A small runner script injected at startup replaces the built-in `print` with a version that records each call's line number and returns all output as JSON over stdout.
 
 ### JSX / TSX live preview
 
@@ -93,7 +100,7 @@ Clicking the **VIM** button in the titlebar calls `initVimMode(editor, statusbar
 | Preview styles | `@tailwindcss/browser` v4 |
 | Vim bindings | `monaco-vim` |
 | Build tool | Vite 6 |
-| Packaging | electron-builder (AppImage) |
+| Packaging | electron-builder (DMG + ZIP, arm64) |
 
 ---
 
@@ -101,11 +108,14 @@ Clicking the **VIM** button in the titlebar calls `initVimMode(editor, statusbar
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl+S` | Save file |
-| `Ctrl+N` | New file |
-| `Ctrl+T` | New tab |
-| `Ctrl+W` | Close tab |
-| `Ctrl+O` | Open file |
+| `⌘S` | Save file |
+| `⌘⇧S` | Save as… |
+| `⌘N` | New file |
+| `⌘T` | New tab |
+| `⌘W` | Close tab |
+| `⌘⇧W` | Close window |
+| `⌘O` | Open file |
+| `⌘↩` | Run code |
 
 ---
 
@@ -125,12 +135,12 @@ Clicking the **VIM** button in the titlebar calls `initVimMode(editor, statusbar
 
 ## Plugin system
 
-Drop any `.js` file in `~/.config/xp/plugins/` and it will be loaded when the editor mounts. Open the folder from inside the app via **Archivo → Carpeta de plugins…**
+Drop any `.js` file in `~/Library/Application Support/XP Playground/plugins/` and it will be loaded when the editor mounts. Open the folder from inside the app via **Archivo → Carpeta de plugins…**
 
 A plugin exports a default object with an `activate` function that receives the Monaco namespace, the editor instance, and a disposal callback:
 
 ```js
-// ~/.config/xp/plugins/my-plugin.js
+// ~/Library/Application Support/XP Playground/plugins/my-plugin.js
 
 export default {
   name: 'my-plugin',
@@ -157,7 +167,8 @@ Plugins can register completion providers, hover providers, code actions, Monarc
 ```
 xp/
 ├── electron/
-│   ├── main.js          # Main process: IPC handlers, code runners, esbuild transforms
+│   ├── main.js          # Main process: window, IPC handlers, Python resolver, esbuild transforms
+│   ├── menu.js          # Native macOS application menu and shortcuts
 │   └── preload.js       # Context bridge exposing window.xp to the renderer
 ├── src/
 │   ├── components/
@@ -165,10 +176,10 @@ xp/
 │   │   ├── Output.jsx   # Console output panel with line highlighting
 │   │   ├── PreviewPane.jsx  # Sandboxed iframe renderer for JSX/TSX
 │   │   ├── TabBar.jsx   # Multi-tab bar
-│   │   ├── TitleBar.jsx # Custom frameless titlebar (file menu, lang, theme, layout, vim toggle)
+│   │   ├── TitleBar.jsx # Hidden-inset titlebar (file menu, lang, theme, layout, vim toggle)
 │   │   └── ThemeSelector.jsx
 │   ├── lib/
-│   │   ├── pluginLoader.js   # Loads ~/.config/xp/plugins/*.js at editor mount
+│   │   ├── pluginLoader.js   # Loads plugins from Application Support at editor mount
 │   │   └── tailwindClasses.js  # Full Tailwind class list for completions
 │   ├── assets/
 │   │   ├── react-bundle.js    # Pre-bundled React IIFE for iframe injection
@@ -177,7 +188,7 @@ xp/
 │   └── themes.js        # Theme definitions (CSS vars + Monaco token rules)
 ├── scripts/
 │   └── gen-preview-bundles.mjs  # Build step: bundles React and Tailwind for the iframe
-├── install.sh           # Installs AppImage to ~/.local/bin and creates .desktop entry
+├── install-macos.sh     # Copies the built .app to ~/Applications
 └── vite.config.js
 ```
 
@@ -192,9 +203,15 @@ npm run electron:build
 Runs in sequence:
 1. `gen-preview-bundles.mjs` — bundles React and Tailwind into `src/assets/` for offline iframe use
 2. `vite build` — compiles the renderer and Electron entry points
-3. `electron-builder` — packages everything as a Linux AppImage
+3. `electron-builder` — packages an unsigned `arm64` DMG and ZIP
 
-The output is `release/XP Playground-x.x.x.AppImage`.
+Outputs:
+
+```
+release/XP Playground-1.0.0-arm64.dmg
+release/XP Playground-1.0.0-arm64.zip
+release/mac-arm64/XP Playground.app
+```
 
 ---
 

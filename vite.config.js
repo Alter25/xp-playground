@@ -26,7 +26,7 @@ export default defineConfig({
           },
         },
         onstart({ startup }) {
-          startup(['--no-sandbox', '.'])
+          startup(['.'])
         },
       },
       {

@@ -47,7 +47,7 @@ export default function useCodeRunner(activeTab, updateTab) {
 
   const { id: activeId, code: activeCode, language: activeLang } = activeTab ?? {}
 
-  // Ref updated every render so Ctrl+Enter always has fresh values without deps
+  // Ref updated every render so Cmd+Enter always has fresh values without deps
   const runNowRef = useRef(null)
   runNowRef.current = () => {
     clearTimeout(pendingRef.current)

@@ -27,7 +27,7 @@ function Tab({ tab, isActive, isRunning, onTabClick, onTabClose }) {
       <button
         className="tab-close"
         onClick={(e) => { e.stopPropagation(); onTabClose(tab.id) }}
-        title="Cerrar (Ctrl+W)"
+        title="Cerrar (⌘W)"
       >
         ×
       </button>
@@ -49,7 +49,7 @@ export default function TabBar({ tabs, activeTabId, runningTabId, onTabClick, on
             onTabClose={onTabClose}
           />
         ))}
-        <button className="tabbar-add" onClick={() => onNewTab()} title="Nueva pestaña (Ctrl+T)">
+        <button className="tabbar-add" onClick={() => onNewTab()} title="Nueva pestaña (⌘T)">
           +
         </button>
       </div>

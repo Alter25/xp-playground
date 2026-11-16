@@ -11,7 +11,7 @@ Los plugins de XP son archivos JavaScript que extienden el editor Monaco con nue
 Coloca tus plugins en:
 
 ```
-~/.config/xp/plugins/
+~/Library/Application Support/XP Playground/plugins/
 ```
 
 Puedes abrir esta carpeta directamente desde la app: **Archivo → Carpeta de plugins…**
@@ -89,7 +89,7 @@ activate({ monaco, onDispose }) {
 Muestra sugerencias de CSS custom properties al escribir `--`.
 
 ```js
-// ~/.config/xp/plugins/css-vars.js
+// ~/Library/Application Support/XP Playground/plugins/css-vars.js
 
 export default {
   name: 'css-vars',
@@ -146,7 +146,7 @@ export default {
 Muestra documentación al pasar el cursor sobre una función.
 
 ```js
-// ~/.config/xp/plugins/hover-docs.js
+// ~/Library/Application Support/XP Playground/plugins/hover-docs.js
 
 const DOCS = {
   useState:   '`useState(initialValue)` → `[state, setState]`\nHook para estado local en componentes funcionales.',
@@ -192,7 +192,7 @@ export default {
 Añade snippets de código propios.
 
 ```js
-// ~/.config/xp/plugins/my-snippets.js
+// ~/Library/Application Support/XP Playground/plugins/my-snippets.js
 
 export default {
   name: 'my-snippets',
@@ -261,7 +261,7 @@ export default {
 Registra un lenguaje ficticio con coloreo básico.
 
 ```js
-// ~/.config/xp/plugins/lang-formula.js
+// ~/Library/Application Support/XP Playground/plugins/lang-formula.js
 
 export default {
   name: 'lang-formula',
@@ -371,7 +371,7 @@ provideCompletionItems(model, position) {
 ## Plantilla mínima para copiar
 
 ```js
-// ~/.config/xp/plugins/mi-plugin.js
+// ~/Library/Application Support/XP Playground/plugins/mi-plugin.js
 
 export default {
   name: 'mi-plugin',

@@ -1,4 +1,4 @@
-// Loads user plugins from ~/.config/xp/plugins/ via IPC.
+// Loads user plugins from Application Support via IPC.
 // Each plugin is an ES module that exports a default object with an activate() function.
 
 let _activated = false
