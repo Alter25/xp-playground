@@ -12,15 +12,15 @@ created: 2026-05-11
 # XP Playground · Manual paso a paso
 
 > [!info] ¿Qué vas a construir?
-> Un playground de código de escritorio para Linux, similar a RunJS. El usuario escribe código (JS, TS, JSX, TSX, Python) y ve los resultados en tiempo real. Los componentes JSX/TSX se visualizan en un panel preview con Tailwind v4.
+> Un playground de código de escritorio para macOS, similar a RunJS. El usuario escribe código (JS, TS, JSX, TSX, Python) y ve los resultados en tiempo real. Los componentes JSX/TSX se visualizan en un panel preview con Tailwind v4.
 
 ---
 
 ## Índice
 
 1. [[#Capítulo 1 · Configuración del proyecto]]
-2. [[#Capítulo 2 · Ventana Electron sin bordes]]
-3. [[#Capítulo 3 · TitleBar y controles de ventana]]
+2. [[#Capítulo 2 · Ventana nativa en macOS]]
+3. [[#Capítulo 3 · Menú nativo y TitleBar]]
 4. [[#Capítulo 4 · Editor Monaco]]
 5. [[#Capítulo 5 · Ejecución de código JavaScript y TypeScript]]
 6. [[#Capítulo 6 · Ejecución de Python]]
@@ -74,6 +74,7 @@ npm install -D electron vite @vitejs/plugin-react \
 xp/
 ├── electron/
 │   ├── main.js        ← proceso principal Electron
+│   ├── menu.js        ← menú nativo de macOS
 │   └── preload.js     ← puente seguro renderer ↔ main
 ├── src/
 │   ├── components/
@@ -89,6 +90,7 @@ xp/
 │   ├── main.jsx       ← entrada React
 │   └── themes.js
 ├── index.html
+├── install-macos.sh
 ├── vite.config.js
 └── package.json
 ```
@@ -121,9 +123,10 @@ export default defineConfig({
 
 ```json
 "scripts": {
-  "dev":            "vite",
-  "electron:dev":   "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-  "electron:build": "vite build && electron-builder"
+  "dev":                "vite",
+  "electron:dev":       "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+  "electron:build":     "vite build && electron-builder --mac --arm64",
+  "electron:build:dir": "vite build && electron-builder --mac --arm64 --dir"
 }
 ```
 
@@ -132,17 +135,20 @@ export default defineConfig({
 
 ---
 
-## Capítulo 2 · Ventana Electron sin bordes
+## Capítulo 2 · Ventana nativa en macOS
 
 ### Concepto clave
 
+En macOS no hace falta ocultar el marco con `frame: false`. La opción `titleBarStyle: 'hiddenInset'` oculta la barra de título pero conserva los **traffic lights** nativos (cerrar, minimizar, maximizar). La ventana permanece opaca, sin transparencias ni sombras CSS.
+
 Electron tiene dos procesos:
-- **Main process** (`electron/main.js`): acceso a Node.js, crea ventanas, maneja IPC.
+
+- **Main process** (`electron/main.js`): acceso a Node.js, crea ventanas, maneja IPC y el menú.
 - **Renderer process** (`src/`): UI React, igual que un navegador.
 
 Se comunican mediante **IPC** (Inter-Process Communication).
 
-### 2.1 main.js básico
+### 2.1 main.js con ventana nativa
 
 ```js
 // electron/main.js
@@ -150,21 +156,28 @@ import { app, BrowserWindow } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
+app.setName('XP Playground')
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 750,
-    transparent: true,        // ← permite esquinas redondeadas reales
-    titleBarStyle: 'hidden',  // ← oculta la barra de título del SO
-    frame: false,             // ← ventana sin decoraciones nativas
+    minWidth: 700,
+    minHeight: 500,
+    show: false,
+    backgroundColor: '#1e1e1e',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 14 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,   // seguridad: aísla renderer del main
-      nodeIntegration: false,   // seguridad: renderer no tiene Node.js
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   })
+
+  win.once('ready-to-show', () => win.show())
 
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -173,71 +186,134 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow)
-app.on('window-all-closed', () => app.quit())
+app.whenReady().then(() => {
+  createWindow()
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
 ```
 
-> [!warning] `transparent: true`
-> Requiere que el compositor del sistema lo soporte. En Linux necesitas un compositor como Picom, Mutter o KWin. En Windows/macOS funciona siempre.
+> [!note] Traffic lights y padding
+> Los botones nativos se dibujan dentro de la ventana. El contenido del titlebar necesita un `padding-left` de unos 82 px para no quedar debajo de ellos.
 
-### 2.2 Fondo transparente en React
+### 2.2 Fondo opaco en React
 
 ```css
 /* src/index.css */
 html, body, #root {
   height: 100%;
   overflow: hidden;
-  background: transparent; /* ← sin esto, la ventana es negra */
+  background: var(--bg); /* la ventana ya es opaca */
 }
 ```
 
 ```css
 /* src/App.css */
 .app {
-  border-radius: 10px;  /* ← forma real de la ventana, no solo CSS */
-  overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  height: 100vh;
+  background: var(--bg);
+  overflow: hidden; /* sin border-radius ni box-shadow externos */
 }
 ```
 
 ---
 
-## Capítulo 3 · TitleBar y controles de ventana
+## Capítulo 3 · Menú nativo y TitleBar
 
 ### Concepto clave
 
-Sin barra de título nativa, necesitamos recrear los botones de minimizar/maximizar/cerrar en React. La zona de arrastre se declara con la propiedad CSS `-webkit-app-region: drag`.
+En macOS los controles de ventana son nativos: no se recrean en React. El menú de la aplicación sí se define en el main process con `Menu.buildFromTemplate`. Los atajos `⌘` viven en el menú nativo y envían acciones al renderer por IPC.
 
-### 3.1 IPC para controlar la ventana
+### 3.1 Menú nativo
 
-**Preload** — expone funciones seguras al renderer:
+```js
+// electron/menu.js
+import { app, BrowserWindow, Menu, shell } from 'electron'
+
+function send(action) {
+  BrowserWindow.getFocusedWindow()?.webContents.send('menu-action', action)
+}
+
+export default function installMenu() {
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Archivo',
+      submenu: [
+        { label: 'Nuevo archivo', accelerator: 'CmdOrCtrl+N', click: () => send('new-file') },
+        { label: 'Nueva pestaña', accelerator: 'CmdOrCtrl+T', click: () => send('new-tab') },
+        { label: 'Abrir…', accelerator: 'CmdOrCtrl+O', click: () => send('open') },
+        { label: 'Guardar', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
+        { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-as') },
+        { label: 'Cerrar pestaña', accelerator: 'CmdOrCtrl+W', click: () => send('close-tab') },
+        { label: 'Cerrar ventana', accelerator: 'CmdOrCtrl+Shift+W', click: () => BrowserWindow.getFocusedWindow()?.close() },
+        { type: 'separator' },
+        { label: 'Carpeta de plugins…', click: () => send('open-plugins') },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+```
+
+En `app.whenReady()` se llama `installMenu()` antes de crear la ventana. `⌘W` cierra la pestaña activa, `⌘⇧W` cierra la ventana y `⌘Q` sale de la app.
+
+### 3.2 Preload para acciones del menú
 
 ```js
 // electron/preload.js
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('xp', {
-  minimize: () => ipcRenderer.send('window-minimize'),
-  maximize: () => ipcRenderer.send('window-maximize'),
-  close:    () => ipcRenderer.send('window-close'),
+  platform: process.platform,
+  onMenuAction: (callback) => {
+    const listener = (_event, action) => callback(action)
+    ipcRenderer.on('menu-action', listener)
+    return () => ipcRenderer.removeListener('menu-action', listener)
+  },
 })
 ```
 
-**Main** — escucha los eventos:
-
-```js
-// electron/main.js
-import { ipcMain, BrowserWindow } from 'electron'
-
-ipcMain.on('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender)?.minimize())
-ipcMain.on('window-maximize', (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender)
-  win?.isMaximized() ? win.unmaximize() : win.maximize()
-})
-ipcMain.on('window-close', (e) => BrowserWindow.fromWebContents(e.sender)?.close())
+```jsx
+// src/App.jsx — reaccionar a las acciones del menú
+useEffect(() => {
+  if (!window.xp?.onMenuAction) return
+  const unsubscribe = window.xp.onMenuAction((action) => {
+    if (action === 'new-file') handleNew()
+    if (action === 'new-tab') addTab()
+    if (action === 'open') handleOpen()
+    if (action === 'save') handleSave()
+    if (action === 'save-as') handleSaveAs()
+    if (action === 'close-tab') closeTab(activeTabId)
+    if (action === 'open-plugins') window.xp.openPluginsDir()
+  })
+  return () => unsubscribe?.()
+}, [handleNew, handleOpen, handleSave, handleSaveAs, addTab, closeTab, activeTabId])
 ```
 
-### 3.2 Componente TitleBar
+### 3.3 TitleBar como zona de arrastre
 
 ```jsx
 // src/components/TitleBar.jsx
@@ -245,17 +321,8 @@ export default function TitleBar({ fileName }) {
   return (
     <div className="titlebar">
       <span className="titlebar-logo">XP</span>
-
-      {/* Zona de arrastre: el usuario arrastra aquí para mover la ventana */}
       <div className="titlebar-drag">
         <span>{fileName}</span>
-      </div>
-
-      {/* Botones de ventana */}
-      <div className="titlebar-controls">
-        <button className="wm-btn wm-minimize" onClick={() => window.xp.minimize()} />
-        <button className="wm-btn wm-maximize" onClick={() => window.xp.maximize()} />
-        <button className="wm-btn wm-close"    onClick={() => window.xp.close()} />
       </div>
     </div>
   )
@@ -264,19 +331,18 @@ export default function TitleBar({ fileName }) {
 
 ```css
 /* TitleBar.css — fragmento clave */
-.titlebar-drag {
-  flex: 1;
-  -webkit-app-region: drag;  /* ← esta zona arrastra la ventana */
+.titlebar {
+  padding: 0 10px 0 82px; /* espacio para los traffic lights */
+  -webkit-app-region: drag;
 }
 
-/* Los botones NO deben ser arrastrables */
-.titlebar-controls {
-  -webkit-app-region: no-drag;
+.file-menu,
+.lang-dropdown,
+.theme-selector,
+.layout-selector,
+.vim-toggle {
+  -webkit-app-region: no-drag; /* los controles deben seguir siendo clicables */
 }
-
-.wm-close    { background: #ff5f57; border-radius: 50%; width: 12px; height: 12px; }
-.wm-minimize { background: #ffbd2e; border-radius: 50%; width: 12px; height: 12px; }
-.wm-maximize { background: #28c840; border-radius: 50%; width: 12px; height: 12px; }
 ```
 
 ---
@@ -306,7 +372,7 @@ export default function Editor({ path, value, language = 'javascript', onChange,
   const modelPath = `${path}.${MODEL_EXT[language] ?? language}`
 
   const handleMount = (editor, monaco) => {
-    // Ctrl+S para guardar
+    // Cmd+S en macOS
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => onSave?.())
     onEditorMount?.(editor, monaco)
   }
@@ -486,7 +552,7 @@ const result = await window.xp.runCode(code, language)
 
 ### Concepto clave
 
-Python se ejecuta como proceso hijo (`child_process.spawn`). Creamos un script runner temporal en `/tmp` que captura `print()` con número de línea y devuelve los resultados como JSON por stdout.
+Python se ejecuta como proceso hijo (`child_process.spawn`). El ejecutable se resuelve en este orden: `XP_PYTHON`, `/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, `/usr/bin/python3`. Creamos un script runner temporal en `/tmp` que captura `print()` con número de línea y devuelve los resultados como JSON por stdout.
 
 ### 6.1 El script runner
 
@@ -522,14 +588,23 @@ sys.stdout.write(json.dumps({'logs': _logs}))
 ### 6.2 Ejecutar el runner desde Node.js
 
 ```js
+function resolvePython() {
+  if (process.env.XP_PYTHON) return process.env.XP_PYTHON
+  const candidates = [
+    '/opt/homebrew/bin/python3',
+    '/usr/local/bin/python3',
+    '/usr/bin/python3',
+  ]
+  return candidates.find(candidate => fs.existsSync(candidate)) ?? 'python3'
+}
+
 async function runPython(code) {
   // Escribir el código del usuario en un archivo temporal
   const codeFile = path.join(tmpdir(), `xp_${Date.now()}.py`)
   fs.writeFileSync(codeFile, code, 'utf-8')
 
   return new Promise((resolve) => {
-    const cmd  = process.platform === 'win32' ? 'python' : 'python3'
-    const proc = spawn(cmd, [RUNNER_PATH, codeFile])
+    const proc = spawn(resolvePython(), [RUNNER_PATH, codeFile])
 
     let stdout = '', stderr = ''
     const timer = setTimeout(() => {
@@ -1220,8 +1295,8 @@ useEffect(() => {
 
 | Concepto | Solución usada |
 |---|---|
-| Ventana sin bordes | `frame: false` + `titleBarStyle: 'hidden'` en Electron |
-| Esquinas redondeadas reales | `transparent: true` en BrowserWindow |
+| Ventana nativa en macOS | `titleBarStyle: 'hiddenInset'` + traffic lights nativos |
+| Ventana opaca sin marcos CSS | `backgroundColor` opaco y sin `transparent`/`frame: false` |
 | Zona de arrastre de ventana | CSS `-webkit-app-region: drag` |
 | Ejecución de JS aislada | `node:vm` con sandbox personalizado |
 | Capturar línea de print en Python | `inspect.currentframe().f_back.f_lineno` |

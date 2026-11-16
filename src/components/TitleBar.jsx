@@ -61,17 +61,17 @@ function FileMenu({ onNew, onNewTab, onOpen, onSave, onSaveAs, onCloseTab, onOpe
   const run = (fn) => () => { fn?.(); setOpen(false) }
 
   const items = [
-    { label: 'Nuevo archivo',  shortcut: 'Ctrl+N', onClick: run(onNew) },
-    { label: 'Nueva pestaña',  shortcut: 'Ctrl+T', onClick: run(onNewTab) },
+    { label: 'Nuevo archivo',  shortcut: '⌘N',      onClick: run(onNew) },
+    { label: 'Nueva pestaña',  shortcut: '⌘T',      onClick: run(onNewTab) },
     null,
-    { label: 'Abrir…',         shortcut: 'Ctrl+O', onClick: run(onOpen) },
+    { label: 'Abrir…',         shortcut: '⌘O',      onClick: run(onOpen) },
     null,
-    { label: 'Guardar',        shortcut: 'Ctrl+S', onClick: run(onSave) },
-    { label: 'Guardar como…',                       onClick: run(onSaveAs) },
+    { label: 'Guardar',        shortcut: '⌘S',      onClick: run(onSave) },
+    { label: 'Guardar como…',  shortcut: '⌘⇧S',     onClick: run(onSaveAs) },
     null,
-    { label: 'Cerrar pestaña', shortcut: 'Ctrl+W', onClick: run(onCloseTab) },
+    { label: 'Cerrar pestaña', shortcut: '⌘W',      onClick: run(onCloseTab) },
     null,
-    { label: 'Carpeta de plugins…', onClick: run(onOpenPluginsDir) },
+    { label: 'Carpeta de plugins…',                 onClick: run(onOpenPluginsDir) },
   ]
 
   return (
@@ -213,12 +213,6 @@ export default function TitleBar({
           {fileName}
           {isDirty && <span className="titlebar-dirty" title="Sin guardar" />}
         </span>
-      </div>
-
-      <div className="titlebar-controls">
-        <button className="wm-btn wm-minimize" onClick={() => window.xp.minimize()} title="Minimizar" />
-        <button className="wm-btn wm-maximize" onClick={() => window.xp.maximize()} title="Maximizar" />
-        <button className="wm-btn wm-close"    onClick={() => window.xp.close()}    title="Cerrar" />
       </div>
     </div>
   )

@@ -1,7 +1,4 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
-
-// SUID sandbox not available on Linux X11 without root — must be set before app ready
-app.commandLine.appendSwitch('no-sandbox')
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -9,6 +6,9 @@ import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { Worker } from 'node:worker_threads'
+import installMenu from './menu.js'
+
+app.setName('XP Playground')
 
 const _require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -51,16 +51,17 @@ function createWindow() {
     height: 750,
     minWidth: 700,
     minHeight: 500,
-    transparent: true,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: false,
-    frame: false,
+    show: false,
+    backgroundColor: '#1e1e1e',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 14 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   })
+  win.once('ready-to-show', () => win.show())
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
@@ -102,14 +103,23 @@ sys.stdout.write(json.dumps({'logs': _logs}))
 
 const RUNNER_PATH = path.join(tmpdir(), 'xp_runner.py')
 
+function resolvePython() {
+  if (process.env.XP_PYTHON) return process.env.XP_PYTHON
+  const candidates = [
+    '/opt/homebrew/bin/python3',
+    '/usr/local/bin/python3',
+    '/usr/bin/python3',
+  ]
+  return candidates.find(candidate => fs.existsSync(candidate)) ?? 'python3'
+}
+
 // ── Ejecución Python ──────────────────────────────────────────────────────────
 async function runPython(code) {
   const codeFile = path.join(tmpdir(), `xp_${Date.now()}.py`)
   fs.writeFileSync(codeFile, code, 'utf-8')
 
   return new Promise((resolve) => {
-    const cmd = process.platform === 'win32' ? 'python' : 'python3'
-    const proc = spawn(cmd, [RUNNER_PATH, codeFile])
+    const proc = spawn(resolvePython(), [RUNNER_PATH, codeFile])
 
     let stdout = '', stderr = '', settled = false
 
@@ -146,7 +156,7 @@ async function runPython(code) {
 
     proc.on('error', (err) => {
       const msg = err.code === 'ENOENT'
-        ? `Python no encontrado. Asegúrate de tener python3 instalado (comando: ${cmd})`
+        ? 'Python 3 no encontrado. Instálalo con Homebrew (brew install python3) o define XP_PYTHON con la ruta al ejecutable.'
         : err.message
       settle({ logs: [], result: undefined, error: { message: msg, line: null } })
     })
@@ -287,16 +297,20 @@ ipcMain.handle('open-plugins-dir', async () => {
   shell.openPath(dir)
 })
 
-// ── Ventana IPC ───────────────────────────────────────────────────────────────
-ipcMain.on('window-minimize', (e) => BrowserWindow.fromWebContents(e.sender)?.minimize())
-ipcMain.on('window-maximize', (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender)
-  win?.isMaximized() ? win.unmaximize() : win.maximize()
-})
-ipcMain.on('window-close', (e) => BrowserWindow.fromWebContents(e.sender)?.close())
-
 app.whenReady().then(() => {
   fs.writeFileSync(RUNNER_PATH, PYTHON_RUNNER, 'utf-8')
+  app.setAboutPanelOptions({
+    applicationName: 'XP Playground',
+    applicationVersion: app.getVersion(),
+  })
+  installMenu()
   createWindow()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
 })
-app.on('window-all-closed', () => app.quit())
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})

@@ -1,12 +1,13 @@
 {
   "name": "xp",
   "version": "1.0.0",
-  "description": "JavaScript playground for Linux desktop",
+  "description": "Desktop code playground for macOS — Electron + React + Monaco. JS, TS, JSX, TSX, Python with live preview.",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "node scripts/gen-preview-bundles.mjs && vite build && electron-builder"
+    "electron:build": "node scripts/gen-preview-bundles.mjs && vite build && electron-builder --mac --arm64",
+    "electron:build:dir": "node scripts/gen-preview-bundles.mjs && vite build && electron-builder --mac --arm64 --dir"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -40,11 +41,24 @@
       "node_modules/esbuild/**",
       "node_modules/@esbuild/**"
     ],
-    "linux": {
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
-        "AppImage"
-      ],
-      "category": "Development"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
     },
     "directories": {
       "output": "release"
